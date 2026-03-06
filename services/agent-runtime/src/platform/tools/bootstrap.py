@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.platform.tools.registry import ToolSpec, registry
-from src.usecase.tools.bindings import search_kb, get_member, write_case_note
+from src.usecases.tools.bindings import search_kb, get_member, write_case_note
 
 
 def register_tools() -> None:

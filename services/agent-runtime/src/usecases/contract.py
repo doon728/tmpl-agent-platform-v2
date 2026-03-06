@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from src.platform.langgraph_runner import LangGraphRunner
-from src.usecase.graph.build_graph import build_graph
+from src.graph.build_graph import build_graph
 
 runner = LangGraphRunner(build_graph)
 
