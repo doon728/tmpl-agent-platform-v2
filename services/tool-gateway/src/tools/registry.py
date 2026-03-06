@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Any, Optional
 from pydantic import Field
 
-from .synth_data import store
+from src.data.synth_store import store
 import re
 import os, json
 from datetime import datetime, timezone
@@ -235,7 +235,7 @@ def write_case_note_handler(inp: WriteCaseNoteInput) -> WriteCaseNoteOutput:
         member_id = ""
 
     # Persist note to shared state volume (MVP)
-    out_path = os.path.join("/app/state", "written_case_notes.jsonl")
+    out_path = os.getenv("RUNTIME_NOTES_PATH", os.path.join(os.getcwd(), "tmp", "written_case_notes.jsonl"))
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     note_id = f"note-{int(datetime.now(timezone.utc).timestamp())}"
