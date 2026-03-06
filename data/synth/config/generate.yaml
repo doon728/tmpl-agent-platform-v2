@@ -1,0 +1,27 @@
+seed: 42
+
+counts:
+  members: 5000
+  providers: 500
+  care_plans: 6000
+  assessments: 8000
+  assessment_questions: 60
+  assessment_responses_per_assessment: 12
+  claims: 50000
+  auths: 5000
+  case_notes: 12000
+
+unstructured_counts:
+  clinical_notes: 6000
+  faxes: 2000
+  letters: 2000
+
+states: ["VA","MD","MO","TX","CA","FL","NY","IL","GA","NC"]
+
+programs: ["ComplexCare","Diabetes","Maternity","BehavioralHealth","Asthma"]
+
+specialties: ["PrimaryCare","Cardiology","Endocrinology","OBGYN","Psychiatry","Pulmonology","Orthopedics"]
+
+service_types: ["MRI","CT","HomeHealth","Inpatient","OutpatientSurgery","PT_OT","DME","SpecialtyRx"]
+
+claim_types: ["PROF","INST","RX"]

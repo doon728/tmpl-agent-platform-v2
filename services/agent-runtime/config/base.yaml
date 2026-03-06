@@ -1,0 +1,21 @@
+app:
+  contract_version: "v1"
+  active_usecase: "usecase"
+
+tool_gateway:
+  url: "http://tool-gateway:8080"
+
+features:
+  memory: false
+  hitl: false
+  observability: true
+
+tools:
+  allowed:
+    - search_kb
+    - get_member
+    - write_case_note
+  risk_levels:
+    search_kb: low
+    get_member: medium
+    write_case_note: high

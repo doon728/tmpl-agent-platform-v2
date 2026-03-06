@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import importlib
+import traceback
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from src.platform.config import load_config
+from src.platform.context import build_context
+from src.platform.auth import authenticate_request
+from src.platform.authorization import enforce_tenant_isolation
+from src.platform.tools.bootstrap import register_tools
+from src.platform.tools.discovery import load_tools_from_gateway
+from typing import Any, Dict
+from src.platform.tools.registry import registry
+
+# Load config
+cfg = load_config()
+register_tools()
+
+load_tools_from_gateway()
+
+print(
+    f"[config] active_usecase={cfg.app.active_usecase} "
+    f"tool_gateway_url={cfg.tool_gateway.url}",
+    flush=True,
+)
+
+# Dynamic usecase loading
+module_path = f"src.{cfg.app.active_usecase}.contract"
+try:
+    contract = importlib.import_module(module_path)
+    execute = getattr(contract, "execute")
+except Exception as e:
+    raise RuntimeError(f"Failed to load usecase contract: {module_path}. Error: {e}")
+
+app = FastAPI(title="Agent Runtime", version="v1")
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"ok": True, "service": "agent-runtime", "version": "v1"}
+
+
+@app.post("/invocations")
+async def invocations(request: Request) -> JSONResponse:
+
+    auth = authenticate_request(request)
+    """
+    AgentCore container contract endpoint.
+    """
+    # 2) Parse payload
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+
+    if not isinstance(payload, dict):
+        payload = {}
+
+    # 3) Context
+    ctx = build_context(request, payload)
+    print(
+        f"[ctx] tenant={ctx.get('tenant_id')} user={ctx.get('user_id')} "
+        f"thread={ctx.get('thread_id')} corr={ctx.get('correlation_id')}",
+        flush=True,
+    )
+
+    # 4) Tenant isolation
+    try:
+        enforce_tenant_isolation(ctx, auth)
+    except PermissionError as e:
+        return JSONResponse(
+            status_code=403,
+            content={
+                "ok": False,
+                "error": {"code": "FORBIDDEN", "message": str(e)},
+                "correlation_id": ctx.get("correlation_id"),
+            },
+        )
+
+    # 5) Prompt
+    prompt = payload.get("prompt") or payload.get("text") or ""
+    if not prompt:
+        prompt = "hello"
+
+    # 6) Execute usecase
+    try:
+        result = execute(prompt, ctx)
+    except Exception as e:
+        print("❌ RUNTIME_ERROR traceback below:", flush=True)
+        print(traceback.format_exc(), flush=True)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "error": {"code": "RUNTIME_ERROR", "message": str(e)},
+                "correlation_id": ctx.get("correlation_id"),
+            },
+        )
+
+    # If usecase returns a chatbot answer, prefer that for UI/demo
+    if isinstance(result, dict):
+        if "answer" in result:
+            out = {"answer": result["answer"]}
+        elif "nurse_summary" in result:
+            # fallback for your current TWO_STEP executor output
+            out = {"answer": result["nurse_summary"]}
+        else:
+            out = result
+    else:
+        out = {"answer": str(result)}
+
+    return JSONResponse(
+        status_code=200,
+        content={"ok": True, "output": out, "correlation_id": ctx.get("correlation_id")},
+    )
+
+
+
+@app.post("/approvals/resume")
+async def approvals_resume(payload: dict):
+    approved = payload.get("approved", False)
+    tool_name = payload.get("tool_name")
+    tool_input = payload.get("tool_input") or {}
+    ctx = payload.get("ctx") or {}
+
+    if not approved:
+        return {"ok": True, "output": {"result": "CANCELLED"}}
+
+    result = registry.invoke_approved(tool_name, tool_input, ctx)
+    return {"ok": True, "output": {"result": result}}

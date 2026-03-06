@@ -1,0 +1,54 @@
+services:
+  tool-gateway:
+    build:
+      context: ./services/tool-gateway
+    image: tool-gateway:local
+    ports:
+      - "8080:8080"
+    environment:
+      CONTRACT_VERSION: "v1"
+      SYNTH_DATA_ROOT: "/app/data/synth/structured"
+    volumes:
+      - ./data:/app/data
+      - ./state:/app/state
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()\""]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  agent-runtime:
+    build:
+      context: ./services/agent-runtime
+    image: agent-runtime:local
+    ports:
+      - "8081:8080"
+    depends_on:
+      tool-gateway:
+        condition: service_healthy
+    environment:
+      CONTRACT_VERSION: "v1"
+      TOOL_GATEWAY_URL: "http://tool-gateway:8080"
+      AUTH_MODE: "OPTIONAL"
+      AGENT_ENV: "dev"
+      SYNTH_DATA_ROOT: "/app/data/synth/structured"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    volumes:
+      - ./data:/app/data
+      - ./state:/app/state
+
+  ui:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_AGENT_RUNTIME_URL: "http://agent-runtime:8080"
+
+    volumes:
+      - ./services/ui:/app
+    command: sh -lc "npm install && npm run dev -- --host 0.0.0.0 --port 3000"
+    depends_on:
+      agent-runtime:
+        condition: service_started
