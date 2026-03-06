@@ -1,29 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List
 
-
-class MemoryService:
-    def get_history(
-        self,
-        *,
-        scope: str,
-        tenant_id: str,
-        key: str,
-    ) -> List[Dict[str, Any]]:
-        raise NotImplementedError
-
-    def append(
-        self,
-        *,
-        scope: str,
-        tenant_id: str,
-        key: str,
-        role: str,
-        content: str,
-    ) -> None:
-        raise NotImplementedError
+from src.platform.memory.memory_interface import MemoryService
 
 
 class InMemoryService(MemoryService):
@@ -52,23 +34,33 @@ class InMemoryService(MemoryService):
         content: str,
     ) -> None:
         k = self._key(scope, tenant_id, key)
-        self._store.setdefault(k, []).append(
-            {"role": role, "content": content}
-        )
+        self._store.setdefault(k, []).append({"role": role, "content": content})
 
 
 class AgentCoreMemoryService(MemoryService):
-    """
-    Placeholder for later. We will implement when you wire AgentCore memory APIs.
-    """
-    def get_history(self, *, tenant_id: str, user_id: str, thread_id: str) -> List[Dict[str, Any]]:
+    def get_history(
+        self,
+        *,
+        scope: str,
+        tenant_id: str,
+        key: str,
+    ) -> List[Dict[str, Any]]:
         raise RuntimeError("AgentCore memory backend not implemented yet")
 
-    def append(self, *, tenant_id: str, user_id: str, thread_id: str, role: str, content: str) -> None:
+    def append(
+        self,
+        *,
+        scope: str,
+        tenant_id: str,
+        key: str,
+        role: str,
+        content: str,
+    ) -> None:
         raise RuntimeError("AgentCore memory backend not implemented yet")
 
 
 _service: MemoryService | None = None
+
 
 def get_memory_service() -> MemoryService:
     global _service
@@ -88,26 +80,18 @@ def get_memory_service() -> MemoryService:
     raise RuntimeError(f"Unknown MEMORY_BACKEND: {backend}")
 
 
-    # -----------------------------
-# Chat thread memory (MVP)
-# -----------------------------
-
-import json
-from pathlib import Path
-
 THREAD_FILE = Path("./state/chat_threads.jsonl")
 
 
-def _ensure_thread_file():
+def _ensure_thread_file() -> None:
     THREAD_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not THREAD_FILE.exists():
         THREAD_FILE.write_text("")
 
 
-def load_thread(thread_id: str):
+def load_thread(thread_id: str) -> List[Dict[str, Any]]:
     _ensure_thread_file()
-
-    history = []
+    history: List[Dict[str, Any]] = []
 
     with THREAD_FILE.open() as f:
         for line in f:
@@ -118,7 +102,7 @@ def load_thread(thread_id: str):
     return history
 
 
-def append_thread_message(thread_id: str, role: str, content: str):
+def append_thread_message(thread_id: str, role: str, content: str) -> None:
     _ensure_thread_file()
 
     with THREAD_FILE.open("a") as f:
