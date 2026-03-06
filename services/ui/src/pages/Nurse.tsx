@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { postJson } from "../lib/api";
 
 type InvocationOk = { ok: true; output: any; correlation_id: string };
@@ -16,31 +16,37 @@ function uid() {
   return Math.random().toString(16).slice(2) + "-" + Date.now().toString(16);
 }
 
-function extractAssistantText(output: any): string {
-  // Your backend now returns: { output: { answer: "..." } }
-  if (!output) return "No output.";
+function defaultWelcomeMessage(): ChatMsg {
+  return {
+    id: uid(),
+    role: "assistant",
+    ts: Date.now(),
+    text:
+      "Hi — I’m the Nurse assistant.\n\nTry:\n- For assessment asmt-000001 summarize status and latest note\n- Write a case note for assessment asmt-000001: <text>",
+  };
+}
 
-  if (typeof output === "string") return output;
+function extractAssistantText(output: unknown): string {
+  const o: any = output;
 
-  if (typeof output?.answer === "string") return output.answer;
+  if (!o) return "No output.";
+  if (typeof o === "string") return o;
+  if (typeof o?.answer === "string") return o.answer;
 
-  // If something regresses to TWO_STEP dict:
-  if (output?.result === "OK" && output?.mode === "TWO_STEP") {
-    const nurse = (output?.nurse_summary || "").trim();
-    const policy = (output?.policy_summary || "").trim();
+  if (o?.result === "OK" && o?.mode === "TWO_STEP") {
+    const nurse = (o?.nurse_summary || "").trim();
+    const policy = (o?.policy_summary || "").trim();
     return [nurse, policy].filter(Boolean).join("\n\n") || "Done.";
   }
 
-  // Approval required dict (some flows might return this)
-  if (output?.result === "APPROVAL_REQUIRED") {
-    const a = output?.approval || {};
+  if (o?.result === "APPROVAL_REQUIRED") {
+    const a = o?.approval || {};
     const tool = a?.tool_name || "unknown_tool";
     const msg = a?.message || "Approval required.";
     return `Approval required.\nTool: ${tool}\nReason: ${msg}`;
   }
 
-  // Fallback
-  return JSON.stringify(output, null, 2);
+  return JSON.stringify(o, null, 2);
 }
 
 export default function Nurse() {
@@ -50,28 +56,49 @@ export default function Nurse() {
 
   const [input, setInput] = useState("For assessment asmt-000001 summarize status and latest note");
   const [busy, setBusy] = useState(false);
-
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    {
-      id: uid(),
-      role: "assistant",
-      ts: Date.now(),
-      text:
-        "Hi — I’m the Nurse assistant.\n\nTry:\n- For assessment asmt-000001 summarize status and latest note\n- Write a case note for assessment asmt-000001: <text>",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMsg[]>([defaultWelcomeMessage()]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  const storageKey = useMemo(
+    () => `nurse-chat:${tenantId}:${userId}:${threadId}`,
+    [tenantId, userId, threadId]
+  );
 
   function scrollToBottom() {
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
   }
 
-  const lastApprovalPayload = useMemo(() => {
-    // If your UI wants to copy approval JSON, we can store it when backend returns it.
-    // For now, we’ll detect it from the latest assistant message text only if backend returns approval object.
-    return null as null | string;
-  }, []);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) {
+        setMessages([defaultWelcomeMessage()]);
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setMessages(parsed);
+      } else {
+        setMessages([defaultWelcomeMessage()]);
+      }
+    } catch {
+      setMessages([defaultWelcomeMessage()]);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch {
+      // ignore localStorage failures
+    }
+  }, [storageKey, messages]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   async function send() {
     const prompt = (input || "").trim();
@@ -81,7 +108,6 @@ export default function Nurse() {
     setMessages((m) => [...m, userMsg]);
     setInput("");
     setBusy(true);
-    scrollToBottom();
 
     try {
       const data = await postJson<InvocationResp>("/invocations", {
@@ -94,7 +120,6 @@ export default function Nurse() {
       if (!data.ok) {
         const errText = `Error (${data.error.code}): ${data.error.message}`;
         setMessages((m) => [...m, { id: uid(), role: "system", ts: Date.now(), text: errText }]);
-        scrollToBottom();
         return;
       }
 
@@ -104,23 +129,32 @@ export default function Nurse() {
         ...m,
         { id: uid(), role: "assistant", ts: Date.now(), text: assistantText },
       ]);
-      scrollToBottom();
     } catch (e: any) {
       setMessages((m) => [
         ...m,
         { id: uid(), role: "system", ts: Date.now(), text: `UI Error: ${e?.message || String(e)}` },
       ]);
-      scrollToBottom();
     } finally {
       setBusy(false);
     }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter sends, Shift+Enter adds newline
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
+    }
+  }
+
+  function clearChat() {
+    const fresh: ChatMsg[] = [
+      { id: uid(), role: "assistant", ts: Date.now(), text: "New chat. Ask me anything." },
+    ];
+    setMessages(fresh);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(fresh));
+    } catch {
+      // ignore localStorage failures
     }
   }
 
@@ -133,7 +167,6 @@ export default function Nurse() {
         </div>
       </div>
 
-      {/* Header controls */}
       <div className="row" style={{ marginTop: 10 }}>
         <div className="col">
           <div className="label">tenant_id</div>
@@ -149,7 +182,6 @@ export default function Nurse() {
         </div>
       </div>
 
-      {/* Chat transcript */}
       <div
         style={{
           flex: 1,
@@ -160,12 +192,13 @@ export default function Nurse() {
           overflowY: "auto",
           background: "#0f172a",
           minHeight: "360px",
-          maxHeight: "420px"
+          maxHeight: "420px",
         }}
       >
         {messages.map((m) => {
           const isUser = m.role === "user";
           const isSystem = m.role === "system";
+
           return (
             <div
               key={m.id}
@@ -175,29 +208,26 @@ export default function Nurse() {
                 marginBottom: 10,
               }}
             >
-            <div
-              style={{
-                maxWidth: "78%",
-                whiteSpace: "pre-wrap",
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: isSystem
-                  ? "1px solid rgba(239,68,68,0.45)"
-                  : isUser
-                  ? "1px solid rgba(59,130,246,0.45)"
-                  : "1px solid rgba(255,255,255,0.12)",
-                background: isSystem
-                  ? "#3f1d1d"
-                  : isUser
-                  ? "#1d4ed8"
-                  : "#1e293b",
-                color: "#f8fafc",
-                fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
-                fontSize: 14,
-                lineHeight: 1.45,
-                boxShadow: "0 1px 2px rgba(0,0,0,0.25)"
-              }}
-            >
+              <div
+                style={{
+                  maxWidth: "78%",
+                  whiteSpace: "pre-wrap",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: isSystem
+                    ? "1px solid rgba(239,68,68,0.45)"
+                    : isUser
+                    ? "1px solid rgba(59,130,246,0.45)"
+                    : "1px solid rgba(255,255,255,0.12)",
+                  background: isSystem ? "#3f1d1d" : isUser ? "#1d4ed8" : "#1e293b",
+                  color: "#f8fafc",
+                  fontFamily:
+                    "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+                  fontSize: 14,
+                  lineHeight: 1.45,
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.25)",
+                }}
+              >
                 {m.text}
               </div>
             </div>
@@ -206,7 +236,6 @@ export default function Nurse() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Composer */}
       <div style={{ marginTop: 12 }}>
         <div className="label">Message</div>
         <textarea
@@ -219,7 +248,7 @@ export default function Nurse() {
             minHeight: 70,
             background: "#0f172a",
             color: "#f8fafc",
-            border: "1px solid rgba(255,255,255,0.12)"
+            border: "1px solid rgba(255,255,255,0.12)",
           }}
         />
         <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
@@ -227,18 +256,11 @@ export default function Nurse() {
             {busy ? "Sending..." : "Send"}
           </button>
 
-          <button
-            className="btn secondary"
-            onClick={() => setMessages([{ id: uid(), role: "assistant", ts: Date.now(), text: "New chat. Ask me anything." }])}
-            disabled={busy}
-          >
+          <button className="btn secondary" onClick={clearChat} disabled={busy}>
             Clear chat
           </button>
         </div>
       </div>
-
-      {/* Optional: approval payload hook later */}
-      {lastApprovalPayload ? null : null}
     </div>
   );
 }
