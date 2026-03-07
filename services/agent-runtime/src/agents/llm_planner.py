@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any
+import importlib
 import os
+from typing import List, Dict, Any
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+
+from src.platform.config import load_config
+
+cfg = load_config()
+USECASE = cfg.app.active_usecase
+
+prompts_module = importlib.import_module(f"src.usecases.{USECASE}.prompts")
+PLANNER_SYSTEM_PROMPT = prompts_module.PLANNER_SYSTEM_PROMPT
 
 
 def plan(prompt: str, history: List[Dict[str, Any]]) -> List[str]:
@@ -22,26 +31,7 @@ def plan(prompt: str, history: List[Dict[str, Any]]) -> List[str]:
         if content:
             history_text += f"{role.upper()}: {content}\n"
 
-    system = SystemMessage(
-        content=(
-            "You are a care management planner.\n"
-            "Your job is to choose the NEXT tool call.\n\n"
-            "Allowed tool outputs format (return EXACTLY one line):\n"
-            "- get_assessment_summary: <assessment_id>\n"
-            "- get_member_summary: <member_id>\n"
-            "- write_case_note: <case_id> | <note>\n"
-            "- search_kb: <query>\n\n"
-            "Rules:\n"
-            "1. If the current user message refers to something discussed earlier, use conversation history.\n"
-            "2. If the user asks follow-up questions like 'what was the risk level', 'what member was that', "
-            "'summarize that assessment again', infer the most recent assessment_id or member_id from history.\n"
-            "3. Prefer get_assessment_summary if the discussion is about an assessment.\n"
-            "4. Prefer get_member_summary if the discussion is about a member.\n"
-            "5. Only use search_kb for policy/guideline/coverage questions or when no assessment/member context exists.\n"
-            "6. For write_case_note, only return write_case_note if the user explicitly asks to write/add/update a note.\n"
-            "7. Return only one tool line. No explanation."
-        )
-    )
+    system = SystemMessage(content=PLANNER_SYSTEM_PROMPT)
 
     human = HumanMessage(
         content=(
@@ -53,7 +43,6 @@ def plan(prompt: str, history: List[Dict[str, Any]]) -> List[str]:
 
     resp = llm.invoke([system, human]).content.strip()
 
-    # Basic safety fallback
     if not resp or ":" not in resp:
         return [f"search_kb: {p}"]
 

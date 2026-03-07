@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.platform.tools.registry import ToolSpec, registry
-from src.usecases.tools.bindings import search_kb, get_member, write_case_note
+from src.platform.tools.bindings import search_kb, get_member, write_case_note
 
 
 def register_tools() -> None:
@@ -48,7 +48,7 @@ def register_tools() -> None:
                 "properties": {"note": {"type": "string"}},
                 "required": ["note"],
             },
-            handler=lambda tool_input, ctx: write_case_note(tool_input["note"], ctx),
+            handler=lambda tool_input, ctx: write_case_note(tool_input["case_id"], tool_input["note"], ctx),
             mode="write",
             primary_arg="note",
         )

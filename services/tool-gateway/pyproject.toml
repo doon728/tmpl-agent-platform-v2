@@ -13,6 +13,8 @@ pydantic = "^2.8.0"
 pyyaml = "^6.0"
 mangum = "^0.17.0"
 jsonschema = "^4.22.0"
+psycopg = {extras = ["binary"], version = "^3.3.3"}
+openai = "^2.26.0"
 
 
 [tool.poetry.group.dev.dependencies]

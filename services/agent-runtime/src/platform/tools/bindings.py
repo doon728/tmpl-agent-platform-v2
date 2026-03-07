@@ -5,8 +5,6 @@ import os
 import requests
 
 TOOL_GATEWAY_URL = os.getenv("TOOL_GATEWAY_URL", "http://tool-gateway:8080")
-
-# tool-gateway expects "v1"
 CONTRACT_VERSION = "v1"
 
 
@@ -41,16 +39,12 @@ def _invoke(tool_name: str, tool_input: Dict[str, Any], ctx: Dict[str, Any]) -> 
 
 def search_kb(query: str, ctx: Dict[str, Any]) -> List[Dict[str, Any]]:
     out = _invoke("search_kb", {"query": query}, ctx)
-    # tool-gateway returns {"results": [...]}
     return out.get("results", [])
 
 
 def get_member(member_id: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
-    # tool-gateway returns {"member": {...} or None}
     return _invoke("get_member", {"member_id": member_id}, ctx)
 
 
-def write_case_note(note: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
-    # tool-gateway expects {"case_id": "...", "note": "..."}
-    case_id = ctx.get("case_id") or "case-unknown"
+def write_case_note(case_id: str, note: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
     return _invoke("write_case_note", {"case_id": case_id, "note": note}, ctx)

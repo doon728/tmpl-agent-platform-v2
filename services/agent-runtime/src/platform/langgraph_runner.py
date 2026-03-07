@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from langgraph.checkpoint.memory import MemorySaver
 from src.platform.memory import get_memory_service
-from src.platform.memory import load_thread, append_thread_message
+from src.platform.observability.tracer import start_run, finish_run
 
 memory = get_memory_service()
 
@@ -26,22 +26,24 @@ class LangGraphRunner:
         self._ensure_app()
 
         tenant_id = ctx.get("tenant_id") or "default-tenant"
-        user_id = ctx.get("user_id") or "default-user"
         thread_id = ctx.get("thread_id") or "default-thread"
         case_id = ctx.get("case_id")
 
-        # ------------------------
-        # 1️⃣ Load Thread History
-        # ------------------------
+        # Start trace run
+        run_id = start_run(
+            agent="agent",
+            thread_id=thread_id,
+            prompt=prompt,
+        )
+
+        ctx["run_id"] = run_id
+
         thread_history: List[Dict[str, Any]] = memory.get_history(
             scope="thread",
             tenant_id=tenant_id,
             key=thread_id,
         )
 
-        # ------------------------
-        # 2️⃣ Load Case History
-        # ------------------------
         case_history: List[Dict[str, Any]] = []
         if case_id:
             case_history = memory.get_history(
@@ -50,12 +52,8 @@ class LangGraphRunner:
                 key=case_id,
             )
 
-        # Case history first, then thread history
         history = case_history + thread_history
 
-        # ------------------------
-        # 3️⃣ Invoke Graph
-        # ------------------------
         initial_state = {
             "prompt": prompt,
             "ctx": ctx,
@@ -64,16 +62,26 @@ class LangGraphRunner:
 
         config = {
             "configurable": {
-                "thread_id": thread_id
+                "thread_id": thread_id,
             }
         }
 
         out = self._app.invoke(initial_state, config=config)
-        result = out.get("answer") or out.get("result") or out
 
-        # ------------------------
-        # 4️⃣ Persist Thread Memory
-        # ------------------------
+        # Critical: preserve approval objects exactly as-is
+        if isinstance(out, dict) and isinstance(out.get("result"), dict):
+            inner = out["result"]
+            if isinstance(inner, dict) and inner.get("result") == "APPROVAL_REQUIRED":
+                result = inner
+            else:
+                result = out.get("answer") or out.get("result") or out
+        elif isinstance(out, dict) and out.get("result") == "APPROVAL_REQUIRED":
+            result = out
+        else:
+            result = out.get("answer") if isinstance(out, dict) else out
+            if result is None:
+                result = out
+
         memory.append(
             scope="thread",
             tenant_id=tenant_id,
@@ -90,9 +98,6 @@ class LangGraphRunner:
             content=str(result),
         )
 
-        # ------------------------
-        # 5️⃣ Persist Case Memory
-        # ------------------------
         if case_id:
             memory.append(
                 scope="case",
@@ -101,5 +106,8 @@ class LangGraphRunner:
                 role="assistant",
                 content=str(result),
             )
+
+        # Finish trace run
+        finish_run(run_id)
 
         return result

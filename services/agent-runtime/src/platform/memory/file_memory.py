@@ -8,12 +8,30 @@ from typing import Any, Dict, List
 from src.platform.memory.memory_interface import MemoryService
 
 
-class InMemoryService(MemoryService):
-    def __init__(self) -> None:
-        self._store: Dict[str, List[Dict[str, Any]]] = {}
+STATE_ROOT = Path(
+    os.getenv(
+        "STATE_ROOT",
+        str(Path(__file__).resolve().parents[4] / "state"),
+    )
+)
 
-    def _key(self, scope: str, tenant_id: str, key: str) -> str:
-        return f"{scope}::{tenant_id}::{key}"
+THREAD_FILE = STATE_ROOT / "chat_threads.jsonl"
+CASE_FILE = STATE_ROOT / "case_memory.jsonl"
+
+
+def _ensure_file(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("")
+
+
+class FileMemoryService(MemoryService):
+    def _file_for_scope(self, scope: str) -> Path:
+        if scope == "thread":
+            return THREAD_FILE
+        if scope == "case":
+            return CASE_FILE
+        raise RuntimeError(f"Unsupported memory scope: {scope}")
 
     def get_history(
         self,
@@ -22,7 +40,19 @@ class InMemoryService(MemoryService):
         tenant_id: str,
         key: str,
     ) -> List[Dict[str, Any]]:
-        return list(self._store.get(self._key(scope, tenant_id, key), []))
+        path = self._file_for_scope(scope)
+        _ensure_file(path)
+
+        history: List[Dict[str, Any]] = []
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                if row.get("tenant_id") == tenant_id and row.get("key") == key:
+                    history.append(row["message"])
+        return history
 
     def append(
         self,
@@ -33,8 +63,24 @@ class InMemoryService(MemoryService):
         role: str,
         content: str,
     ) -> None:
-        k = self._key(scope, tenant_id, key)
-        self._store.setdefault(k, []).append({"role": role, "content": content})
+        path = self._file_for_scope(scope)
+        _ensure_file(path)
+
+        with path.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "scope": scope,
+                        "tenant_id": tenant_id,
+                        "key": key,
+                        "message": {
+                            "role": role,
+                            "content": content,
+                        },
+                    }
+                )
+                + "\n"
+            )
 
 
 class AgentCoreMemoryService(MemoryService):
@@ -70,7 +116,7 @@ def get_memory_service() -> MemoryService:
     backend = (os.getenv("MEMORY_BACKEND", "local") or "local").strip().lower()
 
     if backend == "local":
-        _service = InMemoryService()
+        _service = FileMemoryService()
         return _service
 
     if backend == "agentcore":
@@ -80,41 +126,11 @@ def get_memory_service() -> MemoryService:
     raise RuntimeError(f"Unknown MEMORY_BACKEND: {backend}")
 
 
-THREAD_FILE = Path("./state/chat_threads.jsonl")
-
-
-def _ensure_thread_file() -> None:
-    THREAD_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not THREAD_FILE.exists():
-        THREAD_FILE.write_text("")
-
-
 def load_thread(thread_id: str) -> List[Dict[str, Any]]:
-    _ensure_thread_file()
-    history: List[Dict[str, Any]] = []
-
-    with THREAD_FILE.open() as f:
-        for line in f:
-            row = json.loads(line)
-            if row["thread_id"] == thread_id:
-                history.append(row["message"])
-
-    return history
+    svc = get_memory_service()
+    return svc.get_history(scope="thread", tenant_id="t1", key=thread_id)
 
 
 def append_thread_message(thread_id: str, role: str, content: str) -> None:
-    _ensure_thread_file()
-
-    with THREAD_FILE.open("a") as f:
-        f.write(
-            json.dumps(
-                {
-                    "thread_id": thread_id,
-                    "message": {
-                        "role": role,
-                        "content": content,
-                    },
-                }
-            )
-            + "\n"
-        )
+    svc = get_memory_service()
+    svc.append(scope="thread", tenant_id="t1", key=thread_id, role=role, content=content)

@@ -1,6 +1,6 @@
 from src.platform.memory.memory_interface import MemoryService
 from src.platform.memory.file_memory import (
-    InMemoryService,
+    FileMemoryService,
     AgentCoreMemoryService,
     get_memory_service,
     load_thread,
@@ -9,7 +9,7 @@ from src.platform.memory.file_memory import (
 
 __all__ = [
     "MemoryService",
-    "InMemoryService",
+    "FileMemoryService",
     "AgentCoreMemoryService",
     "get_memory_service",
     "load_thread",

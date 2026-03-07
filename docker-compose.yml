@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   tool-gateway:
     build:
@@ -8,6 +10,13 @@ services:
     environment:
       CONTRACT_VERSION: "v1"
       SYNTH_DATA_ROOT: "/app/data/synth/structured"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-text-embedding-3-small}
+      KB_PG_HOST: host.docker.internal
+      KB_PG_PORT: "5432"
+      KB_PG_DB: agentdb
+      KB_PG_USER: postgres
+      KB_PG_PASSWORD: postgres
     volumes:
       - ./data:/app/data
       - ./state:/app/state
@@ -45,7 +54,6 @@ services:
       - "3000:3000"
     environment:
       VITE_AGENT_RUNTIME_URL: "http://agent-runtime:8080"
-
     volumes:
       - ./services/ui:/app
     command: sh -lc "npm install && npm run dev -- --host 0.0.0.0 --port 3000"

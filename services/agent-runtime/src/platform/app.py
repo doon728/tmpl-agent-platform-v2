@@ -14,7 +14,10 @@ from src.platform.tools.bootstrap import register_tools
 from src.platform.tools.discovery import load_tools_from_gateway
 from typing import Any, Dict
 from src.platform.tools.registry import registry
+from dotenv import load_dotenv
+from src.platform.observability.tracer import list_traces
 
+load_dotenv()
 # Load config
 cfg = load_config()
 register_tools()
@@ -28,7 +31,7 @@ print(
 )
 
 # Dynamic usecase loading
-module_path = f"src.{cfg.app.active_usecase}.contract"
+module_path = f"src.usecases.{cfg.app.active_usecase}.contract"
 try:
     contract = importlib.import_module(module_path)
     execute = getattr(contract, "execute")
@@ -42,6 +45,19 @@ app = FastAPI(title="Agent Runtime", version="v1")
 def health() -> dict:
     return {"ok": True, "service": "agent-runtime", "version": "v1"}
 
+@app.get("/traces")
+def traces() -> dict:
+    return {"ok": True, "traces": list_traces()}
+@app.get("/traces")
+def traces() -> dict:
+    return {"ok": True, "traces": list_traces()}
+
+@app.get("/traces/latest")
+def traces_latest() -> dict:
+    traces = list_traces()
+    if not traces:
+        return {"ok": True, "trace": None}
+    return {"ok": True, "trace": traces[0]}
 
 @app.post("/invocations")
 async def invocations(request: Request) -> JSONResponse:
@@ -60,10 +76,17 @@ async def invocations(request: Request) -> JSONResponse:
         payload = {}
 
     # 3) Context
+    from uuid import uuid4
     ctx = build_context(request, payload)
+
+    ctx["run_id"] = f"run_{uuid4().hex[:8]}"   # ADD THIS LINE
+
+    ctx["prompt"] = payload.get("prompt") or payload.get("text") or ""
+        
     print(
-        f"[ctx] tenant={ctx.get('tenant_id')} user={ctx.get('user_id')} "
-        f"thread={ctx.get('thread_id')} corr={ctx.get('correlation_id')}",
+        f"[ctx] run={ctx.get('run_id')} tenant={ctx.get('tenant_id')} "
+        f"user={ctx.get('user_id')} thread={ctx.get('thread_id')} "
+        f"corr={ctx.get('correlation_id')}",
         flush=True,
     )
 
