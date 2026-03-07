@@ -3,28 +3,33 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from langgraph.checkpoint.memory import MemorySaver
+
 from src.platform.memory import get_memory_service
 from src.platform.observability.tracer import start_run, finish_run
+from src.platform.usecase_config_loader import load_usecase_config
+from src.platform.config import load_config
+from src.platform.agent_types.registry import get_agent_graph_builder
 
 memory = get_memory_service()
 
 
 class LangGraphRunner:
-    def __init__(self, build_graph_fn):
+    def __init__(self, build_graph_fn=None):
         self._build_graph_fn = build_graph_fn
         self._app = None
+        self._loaded_agent_type = None
 
     def _get_checkpointer(self):
         return MemorySaver()
 
-    def _ensure_app(self):
-        if self._app is None:
+    def _ensure_app(self, agent_type: str):
+        if self._app is None or self._loaded_agent_type != agent_type:
             checkpointer = self._get_checkpointer()
-            self._app = self._build_graph_fn(checkpointer)
+            builder = get_agent_graph_builder(agent_type)
+            self._app = builder(checkpointer)
+            self._loaded_agent_type = agent_type
 
     def run(self, prompt: str, ctx: Dict[str, Any]) -> Any:
-        self._ensure_app()
-
         tenant_id = ctx.get("tenant_id") or "default-tenant"
         thread_id = ctx.get("thread_id") or "default-thread"
         case_id = ctx.get("case_id")
@@ -37,6 +42,16 @@ class LangGraphRunner:
         )
 
         ctx["run_id"] = run_id
+
+        # Load usecase configuration
+        cfg = load_config()
+        usecase_cfg = load_usecase_config(cfg.app.active_usecase)
+
+        ctx["usecase_config"] = usecase_cfg.get("usecase", {})
+        ctx["prompts_config"] = usecase_cfg.get("prompts", {})
+
+        agent_type = ctx["usecase_config"].get("agent_type", "chat_agent")
+        self._ensure_app(agent_type)
 
         thread_history: List[Dict[str, Any]] = memory.get_history(
             scope="thread",

@@ -29,6 +29,8 @@ def load_tools_from_gateway() -> None:
         name = t["name"]
         description = t.get("description", "")
         primary_arg = t.get("primary_arg", "query")
+        tags = t.get("tags", []) or []
+        mode = t.get("mode", "read")
 
         def make_handler(tool_name: str):
             def handler(tool_input: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -46,7 +48,6 @@ def load_tools_from_gateway() -> None:
                     timeout=10,
                 ).json()
 
-                # tool-gateway always returns ok/output/error envelope
                 if not resp.get("ok"):
                     raise RuntimeError(resp.get("error", {}).get("message", "Tool gateway error"))
 
@@ -58,11 +59,12 @@ def load_tools_from_gateway() -> None:
             ToolSpec(
                 name=name,
                 description=description,
-                input_schema={"type": "object"},  # keep simple; gateway validates anyway
+                input_schema={"type": "object"},
                 handler=make_handler(name),
-                mode="read",  # runtime governance decides approvals; gateway can stay neutral
+                mode=mode,
                 primary_arg=primary_arg,
+                tags=tags,
             )
         )
 
-        print(f"[discovery] registered tool: {name}")
+        print(f"[discovery] registered tool: {name} tags={tags}")

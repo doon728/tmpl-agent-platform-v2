@@ -9,11 +9,24 @@ from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-def _format_tool_output(tool_name: str, tool_output: Dict) -> str:
-    """
-    Convert tool output into clean context for the LLM.
-    """
+def _get_responder_prompt(ctx: Dict) -> str:
+    prompts_cfg = ctx.get("prompts_config") or {}
+    prompt = prompts_cfg.get("responder_system_prompt")
 
+    if not prompt:
+        prompt = """
+You are a healthcare care-management assistant helping nurses.
+
+Rules:
+- Use only the provided tool data or retrieved policy content
+- Do not invent information
+- Be concise and clinically useful
+- If the information is insufficient, say so
+"""
+    return prompt
+
+
+def _format_tool_output(tool_name: str, tool_output: Dict) -> str:
     if tool_name == "search_kb":
         results: List[Dict] = tool_output.get("results", [])
 
@@ -40,29 +53,21 @@ Policy Text:
     return json.dumps(tool_output, indent=2)
 
 
-def generate_answer(user_prompt: str, tool_name: str, tool_output: Dict) -> str:
+def generate_answer(user_prompt: str, tool_name: str, tool_output: Dict, ctx: Dict | None = None) -> str:
     print("[LLM] generating response", flush=True)
 
+    ctx = ctx or {}
+    system_prompt = _get_responder_prompt(ctx)
     tool_context = _format_tool_output(tool_name, tool_output)
-
-    system_prompt = """
-You are a healthcare care-management assistant helping nurses.
-
-Rules:
-- Use ONLY the provided policy information
-- Do NOT invent facts
-- Be concise and clinically useful
-- If the policy does not contain the answer, say so
-"""
 
     prompt = f"""
 USER QUESTION:
 {user_prompt}
 
-RETRIEVED POLICY CONTEXT:
+RETRIEVED TOOL CONTEXT:
 {tool_context}
 
-Answer the question using ONLY the retrieved policy context.
+Answer the question using ONLY the retrieved tool context.
 """
 
     resp = client.chat.completions.create(

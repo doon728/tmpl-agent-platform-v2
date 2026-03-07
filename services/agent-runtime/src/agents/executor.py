@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 from typing import Any, Dict, List
 
 from src.platform.config import load_config
@@ -12,11 +11,31 @@ from src.platform.tools.registry import registry
 cfg = load_config()
 USECASE = cfg.app.active_usecase
 
-router_module = importlib.import_module(f"src.usecases.{USECASE}.router")
-route_step = router_module.route_step
+from src.platform.tools.router import route_step
 
 
 def _invoke_tool(tool_name: str, tool_input: Dict[str, Any], ctx: Dict[str, Any]) -> Any:
+    usecase_cfg = ctx.get("usecase_config") or {}
+    tool_policy = usecase_cfg.get("tool_policy") or {}
+
+    mode = tool_policy.get("mode", "selected")
+    allowed_tools = tool_policy.get("allowed_tools") or []
+
+    if mode == "selected":
+        if tool_name not in allowed_tools:
+            raise RuntimeError(
+                f"Tool '{tool_name}' is not allowed for this use case."
+            )
+
+    elif mode == "auto":
+        allowed_tags = set(tool_policy.get("allowed_tags") or [])
+        spec = registry.get_spec(tool_name)
+
+        if allowed_tags and not allowed_tags.intersection(set(spec.tags or [])):
+            raise RuntimeError(
+                f"Tool '{tool_name}' is not allowed for this use case."
+            )
+
     result = registry.invoke(tool_name, tool_input, ctx)
 
     if isinstance(result, dict) and result.get("approval_required"):
@@ -58,7 +77,7 @@ def execute(steps: List[str], ctx: Dict[str, Any]) -> Any:
             return result
 
         add_step(run_id, "llm_response", {"tool": tool})
-        answer = generate_answer(ctx.get("prompt", ""), tool, result)
+        answer = generate_answer(ctx.get("prompt", ""), tool, result, ctx)
 
         finish_run(run_id)
         return {

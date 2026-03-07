@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import importlib
 import traceback
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
 
 from src.platform.config import load_config
 from src.platform.context import build_context
@@ -12,16 +13,15 @@ from src.platform.auth import authenticate_request
 from src.platform.authorization import enforce_tenant_isolation
 from src.platform.tools.bootstrap import register_tools
 from src.platform.tools.discovery import load_tools_from_gateway
-from typing import Any, Dict
 from src.platform.tools.registry import registry
-from dotenv import load_dotenv
 from src.platform.observability.tracer import list_traces
+from src.platform.usecase_contract import execute
 
 load_dotenv()
+
 # Load config
 cfg = load_config()
 register_tools()
-
 load_tools_from_gateway()
 
 print(
@@ -30,14 +30,6 @@ print(
     flush=True,
 )
 
-# Dynamic usecase loading
-module_path = f"src.usecases.{cfg.app.active_usecase}.contract"
-try:
-    contract = importlib.import_module(module_path)
-    execute = getattr(contract, "execute")
-except Exception as e:
-    raise RuntimeError(f"Failed to load usecase contract: {module_path}. Error: {e}")
-
 app = FastAPI(title="Agent Runtime", version="v1")
 
 
@@ -45,12 +37,11 @@ app = FastAPI(title="Agent Runtime", version="v1")
 def health() -> dict:
     return {"ok": True, "service": "agent-runtime", "version": "v1"}
 
+
 @app.get("/traces")
 def traces() -> dict:
     return {"ok": True, "traces": list_traces()}
-@app.get("/traces")
-def traces() -> dict:
-    return {"ok": True, "traces": list_traces()}
+
 
 @app.get("/traces/latest")
 def traces_latest() -> dict:
@@ -59,14 +50,11 @@ def traces_latest() -> dict:
         return {"ok": True, "trace": None}
     return {"ok": True, "trace": traces[0]}
 
+
 @app.post("/invocations")
 async def invocations(request: Request) -> JSONResponse:
-
     auth = authenticate_request(request)
-    """
-    AgentCore container contract endpoint.
-    """
-    # 2) Parse payload
+
     try:
         payload = await request.json()
     except Exception:
@@ -75,14 +63,10 @@ async def invocations(request: Request) -> JSONResponse:
     if not isinstance(payload, dict):
         payload = {}
 
-    # 3) Context
-    from uuid import uuid4
     ctx = build_context(request, payload)
-
-    ctx["run_id"] = f"run_{uuid4().hex[:8]}"   # ADD THIS LINE
-
+    ctx["run_id"] = f"run_{uuid4().hex[:8]}"
     ctx["prompt"] = payload.get("prompt") or payload.get("text") or ""
-        
+
     print(
         f"[ctx] run={ctx.get('run_id')} tenant={ctx.get('tenant_id')} "
         f"user={ctx.get('user_id')} thread={ctx.get('thread_id')} "
@@ -90,7 +74,6 @@ async def invocations(request: Request) -> JSONResponse:
         flush=True,
     )
 
-    # 4) Tenant isolation
     try:
         enforce_tenant_isolation(ctx, auth)
     except PermissionError as e:
@@ -103,12 +86,10 @@ async def invocations(request: Request) -> JSONResponse:
             },
         )
 
-    # 5) Prompt
     prompt = payload.get("prompt") or payload.get("text") or ""
     if not prompt:
         prompt = "hello"
 
-    # 6) Execute usecase
     try:
         result = execute(prompt, ctx)
     except Exception as e:
@@ -124,12 +105,10 @@ async def invocations(request: Request) -> JSONResponse:
             },
         )
 
-    # If usecase returns a chatbot answer, prefer that for UI/demo
     if isinstance(result, dict):
         if "answer" in result:
             out = {"answer": result["answer"]}
         elif "nurse_summary" in result:
-            # fallback for your current TWO_STEP executor output
             out = {"answer": result["nurse_summary"]}
         else:
             out = result
@@ -140,7 +119,6 @@ async def invocations(request: Request) -> JSONResponse:
         status_code=200,
         content={"ok": True, "output": out, "correlation_id": ctx.get("correlation_id")},
     )
-
 
 
 @app.post("/approvals/resume")

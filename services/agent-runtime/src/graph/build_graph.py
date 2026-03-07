@@ -21,12 +21,15 @@ class GraphState(TypedDict, total=False):
 def _planner(state: GraphState) -> GraphState:
     prompt = state.get("prompt", "") or ""
     history = state.get("history") or []
-    steps = plan(prompt, history)
+    ctx = state.get("ctx") or {}
+    steps = plan(prompt, history, ctx)
     return {"steps": steps}
 
 
 def _executor(state: GraphState) -> GraphState:
-    result = execute(state.get("steps") or [], state.get("ctx") or {})
+    ctx = dict(state.get("ctx") or {})
+    ctx["history"] = state.get("history") or []
+    result = execute(state.get("steps") or [], ctx)
     return {"result": result}
 
 
@@ -40,7 +43,6 @@ def _after_executor(state: GraphState) -> str:
 def _chat_responder(state: GraphState) -> GraphState:
     result = state.get("result")
 
-    # If executor already produced final text, do not re-wrap it
     if isinstance(result, dict) and isinstance(result.get("answer"), str):
         return {"answer": result["answer"]}
 

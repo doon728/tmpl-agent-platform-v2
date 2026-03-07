@@ -60,3 +60,18 @@ services:
     depends_on:
       agent-runtime:
         condition: service_started
+
+  agent-factory:
+    build:
+      context: ./services/agent-factory
+    image: agent-factory:local
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./:/app/template-repo
+      - /Users/tgaba/agentprojects/generated-repos:/workspace/generated-repos
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/health').read()\""]
+      interval: 2s
+      timeout: 2s
+      retries: 30

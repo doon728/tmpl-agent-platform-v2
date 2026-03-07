@@ -36,3 +36,10 @@ node_modules/
 # tool-gateway local temp
 tool-gateway/tmp/
 services/tool-gateway/tmp/
+
+# Generated repos
+generated-repos/
+
+# Runtime state
+state/
+services/state/

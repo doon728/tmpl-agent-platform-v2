@@ -18,6 +18,8 @@ class ToolSpec(BaseModel):
     output_model: Type[BaseModel]
     handler: Callable[[BaseModel], BaseModel]
     primary_arg: str = "query"
+    mode: str = "read"
+    tags: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -215,6 +217,8 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
         output_model=SearchKBOutput,
         handler=search_kb_handler,
         primary_arg="query",
+        mode="read",
+        tags=["retrieval", "knowledge", "policy", "care_management"],
     ),
 
     "get_member": ToolSpec(
@@ -224,6 +228,8 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
         output_model=GetMemberOutput,
         handler=get_member_handler,
         primary_arg="member_id",
+        mode="read",
+        tags=["member", "lookup", "care_management"],
     ),
 
     "write_case_note": ToolSpec(
@@ -233,6 +239,8 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
         output_model=WriteCaseNoteOutput,
         handler=write_case_note_handler,
         primary_arg="note",
+        mode="write",
+        tags=["case", "notes", "write", "care_management"],
     ),
 
     "get_member_summary": ToolSpec(
@@ -242,6 +250,8 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
         output_model=GetMemberSummaryOutput,
         handler=get_member_summary_handler,
         primary_arg="member_id",
+        mode="read",
+        tags=["member", "summary", "care_management"],
     ),
 
     "get_assessment_summary": ToolSpec(
@@ -251,5 +261,7 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
         output_model=GetAssessmentSummaryOutput,
         handler=get_assessment_summary_handler,
         primary_arg="assessment_id",
+        mode="read",
+        tags=["assessment", "summary", "case", "care_management"],
     ),
 }
