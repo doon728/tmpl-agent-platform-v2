@@ -27,3 +27,6 @@
 {"note_id": "note-1772921089", "member_id": "m-001285", "assessment_id": "asmt-000002", "author": "nurse-001", "created_at": "2026-03-07T22:04:49Z", "note_text": "update case note; patent is sick"}
 {"note_id": "note-1772921404", "member_id": "m-001285", "assessment_id": "asmt-000002", "author": "nurse-001", "created_at": "2026-03-07T22:10:04Z", "note_text": "update case notes as member SMOKING"}
 {"note_id": "note-1772921760", "member_id": "m-001715", "assessment_id": "asmt-000001", "author": "nurse-001", "created_at": "2026-03-07T22:16:00Z", "note_text": "update note; patient TRAVELLING"}
+{"note_id": "note-1772924325", "member_id": "m-001715", "assessment_id": "asmt-000001", "author": "nurse-001", "created_at": "2026-03-07T22:58:45Z", "note_text": "for assessment: member now yelling 01"}
+{"note_id": "note-1772924562", "member_id": "m-001715", "assessment_id": "asmt-000001", "author": "nurse-001", "created_at": "2026-03-07T23:02:42Z", "note_text": "update note as : no insurance"}
+{"note_id": "note-1772925559", "member_id": "m-001715", "assessment_id": "asmt-000001", "author": "nurse-001", "created_at": "2026-03-07T23:19:19Z", "note_text": "member called today"}

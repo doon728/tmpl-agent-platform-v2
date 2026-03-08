@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -57,7 +57,7 @@ class PromptsConfig(BaseModel):
     responder_system_prompt: str
 
 
-class CreateRepoRequest(BaseModel):
+class AgentCreateConfig(BaseModel):
     repo_name: str
     usecase_name: str
     agent_type: str
@@ -76,9 +76,47 @@ class CreateRepoRequest(BaseModel):
     prompts: PromptsConfig
 
 
-class CreateRepoResponse(BaseModel):
-    ok: bool = True
+class AgentSpec(BaseModel):
+    agent_name: str
+    agent_type: str
+    mode: Literal["create_new", "reuse_existing"] = "create_new"
+    capabilities: List[str] = Field(default_factory=list)
+
+    existing_agent_repo: Optional[str] = None
+    existing_agent_endpoint: Optional[str] = None
+
+    create_config: Optional[AgentCreateConfig] = None
+
+
+class AppRepoConfig(BaseModel):
     repo_name: str
-    usecase_name: str
-    status: str
+    app_name: str
+    ui_type: str = "end_user_ui"
+
+
+class CreateApplicationRequest(BaseModel):
+    industry: str
+    app: AppRepoConfig
+    agents: List[AgentSpec] = Field(default_factory=list)
+
+
+class CreatedAgentResult(BaseModel):
+    agent_name: str
+    agent_type: str
+    mode: Literal["create_new", "reuse_existing"]
+    repo_name: Optional[str] = None
     repo_url: Optional[str] = None
+    existing_agent_repo: Optional[str] = None
+    existing_agent_endpoint: Optional[str] = None
+    status: str
+    capabilities: List[str] = Field(default_factory=list)
+
+
+
+class CreateApplicationResponse(BaseModel):
+    ok: bool = True
+    industry: str
+    app_repo_name: str
+    app_repo_url: Optional[str] = None
+    agents: List[CreatedAgentResult] = Field(default_factory=list)
+    status: str = "application_generated"

@@ -3,8 +3,8 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 
-from .models import CreateRepoRequest, CreateRepoResponse
-from .service import create_repo
+from .models import CreateApplicationRequest, CreateApplicationResponse
+from .service import create_application
 
 app = FastAPI(title="Agent Factory", version="v1")
 
@@ -14,10 +14,10 @@ def health():
     return {"ok": True, "service": "agent-factory"}
 
 
-@app.post("/create-repo", response_model=CreateRepoResponse)
-def create_repo_endpoint(payload: CreateRepoRequest):
+@app.post("/create-application", response_model=CreateApplicationResponse)
+def create_application_endpoint(payload: CreateApplicationRequest):
     try:
-        result = create_repo(payload)
+        result = create_application(payload)
         return result
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
