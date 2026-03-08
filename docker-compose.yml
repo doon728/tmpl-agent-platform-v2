@@ -32,12 +32,9 @@ services:
     image: agent-runtime:local
     ports:
       - "8081:8080"
-    depends_on:
-      tool-gateway:
-        condition: service_healthy
     environment:
       CONTRACT_VERSION: "v1"
-      TOOL_GATEWAY_URL: "http://tool-gateway:8080"
+      TOOL_GATEWAY_URL: http://tool-gateway:8080
       AUTH_MODE: "OPTIONAL"
       AGENT_ENV: "dev"
       SYNTH_DATA_ROOT: "/app/data/synth/structured"
@@ -70,6 +67,8 @@ services:
     volumes:
       - ./:/app/template-repo
       - /Users/tgaba/agentprojects/generated-repos:/workspace/generated-repos
+      - ../app-template:/app/app-template
+      - ../chat-agent-template:/app/chat-agent-template
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8090/health').read()\""]
       interval: 2s

@@ -3,7 +3,7 @@ app:
   active_usecase: "cm_assistant"
 
 tool_gateway:
-  url: "http://tool-gateway:8080"
+   url: "http://healthcare-tool-gateway:8080"
 
 features:
   memory: false

@@ -14,7 +14,8 @@ from .models import (
 )
 
 # Current template repo mounted into container
-CURRENT_REPO_ROOT = Path("/app/template-repo")
+APP_TEMPLATE_REPO_ROOT = Path("/app/app-template")
+AGENT_TEMPLATE_REPO_ROOT = Path("/app/chat-agent-template")
 
 # Output location (mounted from host)
 GENERATED_REPOS_ROOT = Path("/workspace/generated-repos")
@@ -46,13 +47,12 @@ def _build_prompts_yaml(payload: AgentCreateConfig) -> dict:
         "responder_system_prompt": payload.prompts.responder_system_prompt,
     }
 
-
-def _copy_repo_skeleton(target_repo_root: Path) -> None:
+def _copy_app_template(target_repo_root: Path) -> None:
     if target_repo_root.exists():
         raise RuntimeError(f"Target repo already exists: {target_repo_root}")
 
     shutil.copytree(
-        CURRENT_REPO_ROOT,
+        APP_TEMPLATE_REPO_ROOT,
         target_repo_root,
         ignore=shutil.ignore_patterns(
             ".git",
@@ -60,7 +60,28 @@ def _copy_repo_skeleton(target_repo_root: Path) -> None:
             "*.pyc",
             ".venv",
             "node_modules",
-            "generated-repos",
+            "dist",
+            "build",
+        ),
+    )
+
+
+def _copy_agent_template(target_repo_root: Path) -> None:
+    if target_repo_root.exists():
+        raise RuntimeError(f"Target repo already exists: {target_repo_root}")
+
+    shutil.copytree(
+        AGENT_TEMPLATE_REPO_ROOT,
+        target_repo_root,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            "__pycache__",
+            "*.pyc",
+            ".venv",
+            "node_modules",
+            "dist",
+            "build",
+            ".pytest_cache",
         ),
     )
 
@@ -209,6 +230,7 @@ def _build_app_agents_config(payload: CreateApplicationRequest) -> dict:
         "industry": payload.industry,
         "tool_gateway": {
             "name": f"{payload.industry}-tool-gateway",
+            "mode": "external_shared",
             "endpoint": "TBD",
         },
         "app_name": payload.app.app_name,
@@ -218,7 +240,7 @@ def _build_app_agents_config(payload: CreateApplicationRequest) -> dict:
 def _create_app_repo(app: AppRepoConfig, payload: CreateApplicationRequest) -> Path:
     target_repo_root = GENERATED_REPOS_ROOT / app.repo_name
 
-    _copy_repo_skeleton(target_repo_root)
+    _copy_app_template(target_repo_root)
     _remove_factory_service(target_repo_root)
     _remove_tool_gateway(target_repo_root)
     _remove_agent_runtime(target_repo_root)
@@ -244,7 +266,7 @@ def _create_app_repo(app: AppRepoConfig, payload: CreateApplicationRequest) -> P
 def _create_agent_repo(create_cfg: AgentCreateConfig) -> Path:
     target_repo_root = GENERATED_REPOS_ROOT / create_cfg.repo_name
 
-    _copy_repo_skeleton(target_repo_root)
+    _copy_agent_template(target_repo_root)
     _remove_factory_service(target_repo_root)
     _remove_tool_gateway(target_repo_root)
     _remove_ui(target_repo_root)
@@ -271,7 +293,9 @@ def create_application(payload: CreateApplicationRequest) -> CreateApplicationRe
                     mode=agent.mode,
                     existing_agent_repo=agent.existing_agent_repo,
                     existing_agent_endpoint=agent.existing_agent_endpoint,
+                    capabilities=agent.capabilities,
                     status="reused_existing_agent",
+                    
                 )
             )
             continue
@@ -288,7 +312,9 @@ def create_application(payload: CreateApplicationRequest) -> CreateApplicationRe
                 mode=agent.mode,
                 repo_name=agent.create_config.repo_name,
                 repo_url=str(agent_repo_root),
+                capabilities=agent.capabilities,
                 status="generated_local_agent_repo",
+
             )
         )
 

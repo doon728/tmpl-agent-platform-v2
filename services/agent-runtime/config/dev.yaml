@@ -4,7 +4,7 @@ logging:
   format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 tool_gateway:
-  url: http://localhost:8080
+  url: http://tool-gateway:8080
   timeout: 10
 
 observability:
